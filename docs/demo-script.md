@@ -1,54 +1,54 @@
-# Kịch bản Demo Chi tiết — ProofWork
+# Detailed Demo Script — ProofWork
 
-Tài liệu này hướng dẫn từng bước thực hiện buổi demo hệ thống **ProofWork** trên mạng **Avalanche Fuji Testnet (Chain ID: 43113)**.
-
----
-
-## Chuẩn bị Trước Buổi Demo (Checklist)
-
-1. **Smart Contract:** Đã deploy `GroupTask.sol` lên Avalanche Fuji, đã cấp quyền `AGENT_ROLE` cho ví Agent (`grantAgentRole`), và đã chạy `npm run export` để cập nhật `shared/abi/GroupTask.json` & `shared/addresses.json`.
-2. **AI Agent (`agent/`):** Đang chạy ở cổng `3000` (`npm run start:dev`). Kiểm tra nhanh bằng `GET http://localhost:3000/agent/health` trả về `"status": "ok"`.
-3. **Frontend (`frontend/`):** Đang chạy (`npm run dev`), mở trình duyệt có cài sẵn ví MetaMask chứa AVAX testnet trên mạng Fuji.
+This document provides a step-by-step walkthrough for demonstrating the **ProofWork** DApp on **Avalanche Fuji Testnet (Chain ID: 43113)**.
 
 ---
 
-## Kịch bản 1: Luồng Thành công (Happy Path)
+## Pre-Demo Checklist
 
-**Mục tiêu:** Chứng minh quy trình khép kín từ lúc tạo Task, nộp bằng chứng hợp lệ, AI Agent tự động xác thực qua sự kiện WebSocket, đến lúc Frontend tự động cập nhật trạng thái và hiển thị Chứng chỉ (Certificate) on-chain.
+1. **Smart Contract:** `GroupTask.sol` is deployed to Avalanche Fuji, `AGENT_ROLE` is granted to the Agent wallet (`grantAgentRole`), and `npm run export` has been executed to populate `shared/abi/GroupTask.json` and `shared/addresses.json`.
+2. **AI Agent (`agent/`):** Running on port `3000` (`npm run start:dev`). Verify via `GET http://localhost:3000/agent/health` returning `"status": "ok"`.
+3. **Frontend (`frontend/`):** Running (`npm run dev`) in a browser with MetaMask connected to Avalanche Fuji Testnet and funded with test AVAX.
 
-| Bước | Thao tác thực hiện | Kết quả kỳ vọng trên hệ thống |
+---
+
+## Scenario 1: Happy Path (Automatic Confirmation & Certificate Issuance)
+
+**Objective:** Demonstrate the end-to-end flow from creating a group and task, submitting valid evidence, automatic AI Agent verification via WebSocket events, to real-time Frontend UI updates and on-chain Certificate lookup.
+
+| Step | Action | Expected System Outcome |
 | :---: | :--- | :--- |
-| **Bước 1** | Mở màn hình **Create Page** (`/create`). Bấm nút **Connect Wallet** trên thanh điều hướng và chấp nhận kết nối ví MetaMask (mạng Avalanche Fuji `43113`). | Nút Connect hiển thị địa chỉ ví rút gọn (vd: `0x1234...abcd`). Các form trên màn hình được mở khóa. |
-| **Bước 2** | - Tại **Form Tạo Group**: Nhập tên nhóm `"Web3 Hackathon Team"` -> Bấm **Tạo Group** -> Xác nhận giao dịch trên MetaMask.<br>- Tại **Form Tạo Task**: Chọn/nhập `groupId = 1`, nhập tên task `"Thiết kế kiến trúc Smart Contract"` -> Bấm **Tạo Task** -> Xác nhận trên MetaMask. | - Giao dịch thành công, hiển thị thông báo đã tạo `groupId = 1` và `taskId = 1`.<br>- Nếu mở sang **Confirm Page** (`/confirm`), thẻ `Task #1` hiển thị màu **Xám (`Pending`)**. |
-| **Bước 3** | Tại **Form Submit Bằng chứng**: Nhập `taskId = 1` và mã bằng chứng hợp lệ (khác `0x0`), ví dụ:<br>`0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08`<br>Bấm **Gửi Bằng chứng** và ký giao dịch. | - Smart Contract phát sự kiện `TaskSubmitted(1, proofHash, userAddress)`.<br>- Sang màn hình **Confirm Page** (`/confirm`), thẻ `Task #1` chuyển sang màu **Vàng (`Submitted` - Agent đang duyệt)**. |
-| **Bước 4** | Quan sát terminal của **AI Agent** (không cần thao tác tay). | - Agent bắt được sự kiện `TaskSubmitted` qua WebSocket.<br>- `LlmService` đánh giá `proofHash != 0x0` -> trả về `decision: "CONFIRM"`.<br>- Agent tự động ký và gửi giao dịch `confirmCompletion(1)` lên Fuji.<br>- Smart Contract phát sự kiện `TaskConfirmed(1, agentAddress, completedAt)`. |
-| **Bước 5** | Quan sát màn hình **Confirm Page** (`/confirm`) và chuyển sang **Certificate Page** (`/certificates`). | - **Tại Confirm Page:** Thẻ `Task #1` tự động đổi từ màu **Vàng** sang **Xanh lá (`Confirmed`)** mà không cần F5, đồng thời xuất hiện Toast thông báo `"Task #1 đã được Agent xác nhận!"`.<br>- **Tại Certificate Page:** Nhập địa chỉ ví người tạo vào ô tìm kiếm -> Hiển thị **Certificate Card** của `Task #1` kèm ngày hoàn thành và link xem giao dịch trên Snowtrace/Snowscan. |
+| **Step 1** | Open **Create Page** (`/create`). Click **Connect Wallet** in the navigation bar and approve the MetaMask connection on Avalanche Fuji (`43113`). | The Connect button displays the shortened wallet address (e.g., `0x1234...abcd`). All forms on the page become enabled. |
+| **Step 2** | - In **Create Group Form**: Enter group name `"Web3 Hackathon Team"` -> Click **Create Group** -> Confirm in MetaMask.<br>- In **Create Task Form**: Enter `groupId = 1` and task title `"Design Smart Contract Architecture"` -> Click **Create Task** -> Confirm in MetaMask. | - Transactions succeed; UI shows notifications for `groupId = 1` and `taskId = 1`.<br>- On the **Confirm Page** (`/confirm`), the `Task #1` card appears in **Gray (`Pending`)**. |
+| **Step 3** | In **Submit Evidence Form**: Enter `taskId = 1` and a valid non-zero `proofHash`, e.g.:<br>`0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08`<br>Click **Submit Evidence** and sign the transaction. | - Smart Contract emits `TaskSubmitted(1, proofHash, userAddress)`.<br>- On **Confirm Page** (`/confirm`), the `Task #1` card turns **Yellow (`Submitted` - Agent Evaluating...)**. |
+| **Step 4** | Observe the **AI Agent** terminal (no manual action required). | - Agent receives `TaskSubmitted` via WebSocket.<br>- `LlmService` evaluates `proofHash != 0x0` -> returns `decision: "CONFIRM"`.<br>- Agent automatically signs and sends `confirmCompletion(1)` to Fuji.<br>- Smart Contract emits `TaskConfirmed(1, agentAddress, completedAt)`. |
+| **Step 5** | Observe **Confirm Page** (`/confirm`) and navigate to **Certificate Page** (`/certificates`). | - **Confirm Page:** `Task #1` card automatically transitions from **Yellow** to **Green (`Confirmed`)** without refreshing the page (F5), accompanied by a Toast notification `"Task #1 confirmed by AI Agent!"`.<br>- **Certificate Page:** Enter the creator's wallet address in the search input -> Displays the **Certificate Card** for `Task #1` with completion timestamp, `proofHash`, and a Snowtrace transaction link. |
 
 ---
 
-## Kịch bản 2: Luồng Từ chối (Reject Path)
+## Scenario 2: Reject Path (Invalid Evidence Rejection)
 
-**Mục tiêu:** Chứng minh AI Agent có khả năng phát hiện bằng chứng không hợp lệ (rỗng / `0x0`) và từ chối on-chain kèm lý do cụ thể.
+**Objective:** Demonstrate that the AI Agent detects invalid/empty evidence (`0x0`) and records an on-chain rejection with a clear reason.
 
-| Bước | Thao tác thực hiện | Kết quả kỳ vọng trên hệ thống |
+| Step | Action | Expected System Outcome |
 | :---: | :--- | :--- |
-| **Bước 1** | Tạo thêm `Task #2` (`"Viết Unit Test cho Contract"`). Tại **Form Submit Bằng chứng**, nhập `taskId = 2` và nhập mã hash rỗng:<br>`0x0000000000000000000000000000000000000000000000000000000000000000` (hoặc `0x0`).<br>Bấm **Gửi Bằng chứng** và ký giao dịch. | - Smart Contract phát sự kiện `TaskSubmitted(2, 0x00...00, userAddress)`.<br>- Trên **Confirm Page**, thẻ `Task #2` hiển thị màu **Vàng (`Submitted`)**. |
-| **Bước 2** | Quan sát terminal của **AI Agent**. | - Agent nhận sự kiện `TaskSubmitted` của `Task #2`.<br>- `LlmService` phát hiện `proofHash == 0x0` -> trả về `decision: "REJECT"` kèm lý do `"Invalid evidence: proofHash is empty (0x0)."`<br>- Agent tự động gọi hàm `rejectCompletion(2, reason)` lên Smart Contract.<br>- Smart Contract phát sự kiện `TaskRejected(2, agentAddress, reason)`. |
-| **Bước 3** | Quan sát màn hình **Confirm Page** (`/confirm`) và **Certificate Page** (`/certificates`). | - **Tại Confirm Page:** Thẻ `Task #2` tự động chuyển sang màu **Đỏ (`Rejected`)**, hiện Toast cảnh báo và khi di chuột vào (tooltip) hiển thị rõ lý do từ chối từ Agent.<br>- **Tại Certificate Page:** `Task #2` **không** được cấp chứng chỉ và không xuất hiện trong danh sách chứng chỉ. |
+| **Step 1** | Create `Task #2` (`"Write Contract Unit Tests"`). In **Submit Evidence Form**, enter `taskId = 2` and an empty zero hash:<br>`0x0000000000000000000000000000000000000000000000000000000000000000` (or `0x0`).<br>Click **Submit Evidence** and sign the transaction. | - Smart Contract emits `TaskSubmitted(2, 0x00...00, userAddress)`.<br>- On **Confirm Page**, `Task #2` appears in **Yellow (`Submitted`)**. |
+| **Step 2** | Observe the **AI Agent** terminal. | - Agent receives `TaskSubmitted` for `Task #2`.<br>- `LlmService` detects `proofHash == 0x0` -> returns `decision: "REJECT"` with reason `"Invalid evidence: proofHash is empty (0x0)."`<br>- Agent automatically calls `rejectCompletion(2, reason)` on the Smart Contract.<br>- Smart Contract emits `TaskRejected(2, agentAddress, reason)`. |
+| **Step 3** | Observe **Confirm Page** (`/confirm`) and **Certificate Page** (`/certificates`). | - **Confirm Page:** `Task #2` automatically turns **Red (`Rejected`)**, triggers a warning Toast, and displays the Agent's rejection reason inside a tooltip/badge.<br>- **Certificate Page:** `Task #2` is **not** issued a certificate and does not appear in the certificate list. |
 
 ---
 
-## Kịch bản 3: Cơ chế Dự phòng khi WebSocket Gián đoạn (Fallback Path)
+## Scenario 3: Fallback Path (When WebSocket Drops)
 
-**Mục tiêu:** Đảm bảo buổi demo luôn thành công 100% ngay cả khi mạng WiFi hội trường hoặc public WebSocket RPC của Fuji bị trễ/ngắt kết nối.
+**Objective:** Guarantee 100% demo reliability even if venue Wi-Fi or the public Fuji WebSocket RPC experiences latency or disconnection.
 
-| Bước | Thao tác thực hiện | Kết quả kỳ vọng trên hệ thống |
+| Step | Action | Expected System Outcome |
 | :---: | :--- | :--- |
-| **Bước 1** | Giả sử người dùng đã nộp bằng chứng cho `Task #3` (trạng thái đang là **Vàng - `Submitted`**), nhưng sau 10 giây WebSocket công cộng chưa đẩy sự kiện về cho Agent. | Thẻ `Task #3` vẫn đang ở trạng thái `Submitted`. |
-| **Bước 2** | Kích hoạt API đánh giá thủ công bằng `curl` (hoặc nút Retry/Evaluate trên UI test):<br>```bash
+| **Step 1** | Suppose the user submitted evidence for `Task #3` (status is **Yellow - `Submitted`**), but after 10 seconds the public WebSocket has not delivered the event to the Agent. | `Task #3` remains in `Submitted` status on the UI. |
+| **Step 2** | Trigger the manual evaluation endpoint via `curl` (or a fallback button):<br>```bash
 curl -X POST http://localhost:3000/agent/evaluate \
   -H "Content-Type: application/json" \
   -H "x-demo-secret: super-secret-demo-key" \
   -d '{"taskId": 3}'
-``` | - Agent lập tức gọi `contract.getTask(3)` qua RPC để lấy thông tin mới nhất.<br>- Agent thực thi đánh giá và gửi giao dịch `confirmCompletion(3)` hoặc `rejectCompletion(3)` lên chuỗi.<br>- API trả về JSON chứa `decision`, `reason` và `txHash`. |
-| **Bước 3** | Quan sát lại giao diện **Confirm Page**. | Thẻ `Task #3` cập nhật trạng thái hoàn tất (`Confirmed` hoặc `Rejected`) ngay khi giao dịch hoàn thành. |
+``` | - Agent immediately calls `contract.getTask(3)` over RPC to fetch the latest on-chain state.<br>- Agent evaluates the task and sends `confirmCompletion(3)` or `rejectCompletion(3)` on-chain.<br>- API responds with JSON containing `status`, `decision`, `reason`, and `txHash`. |
+| **Step 3** | Observe **Confirm Page** (`/confirm`). | `Task #3` updates to its final state (`Confirmed` or `Rejected`) as soon as the transaction is mined. |

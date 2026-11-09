@@ -1,22 +1,22 @@
-# Đặc tả API của AI Agent — `agent/`
+# AI Agent API Specification — `agent/`
 
-AI Agent (NestJS) vừa đóng vai trò **Background Worker** (lắng nghe sự kiện `TaskSubmitted` qua WebSocket), vừa cung cấp **REST API** để kiểm tra trạng thái hoạt động (`health`) và kích hoạt đánh giá thủ công (`evaluate` fallback) khi cần thiết.
+The AI Agent (NestJS) acts both as a **Background Worker** (listening to `TaskSubmitted` events via WebSocket) and as a **REST API Server** for health monitoring (`health`) and manual evaluation fallback (`evaluate`).
 
 - **Base URL (Local):** `http://localhost:3000`
-- **Định dạng dữ liệu:** `application/json`
+- **Content Type:** `application/json`
 
 ---
 
 ## 1. `POST /agent/evaluate`
 
-Kích hoạt AI Agent đọc dữ liệu task từ Smart Contract, thực hiện đánh giá bằng chứng (`proofHash`) và gửi giao dịch `confirmCompletion` hoặc `rejectCompletion` lên mạng Avalanche Fuji.
+Triggers the AI Agent to read task data from the Smart Contract, evaluate its evidence (`proofHash`), and submit either a `confirmCompletion` or `rejectCompletion` transaction to the Avalanche Fuji network.
 
-### Headers bắt buộc
+### Required Headers
 
-| Header | Kiểu | Bắt buộc | Mô tả |
+| Header | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
-| `Content-Type` | `string` | Có | `application/json` |
-| `x-demo-secret` | `string` | Có | Khóa bí mật khớp với biến môi trường `DEMO_SECRET` trên server Agent. |
+| `Content-Type` | `string` | Yes | `application/json` |
+| `x-demo-secret` | `string` | Yes | Secret key matching the `DEMO_SECRET` environment variable on the Agent server. |
 
 ### Request Body
 
@@ -26,13 +26,13 @@ Kích hoạt AI Agent đọc dữ liệu task từ Smart Contract, thực hiện
 }
 ```
 
-| Trường | Kiểu | Bắt buộc | Ràng buộc (Validation) | Mô tả |
+| Field | Type | Required | Validation Rules | Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `taskId` | `number` | Có | `@IsInt()`, `@Min(1)` | Mã định danh của Task trên Smart Contract (đang ở trạng thái `Submitted`). |
+| `taskId` | `number` | Yes | `@IsInt()`, `@Min(1)` | On-chain ID of the Task (must currently be in `Submitted` status). |
 
-### Response Thành công (`200 OK` / `201 Created`)
+### Success Response (`200 OK` / `201 Created`)
 
-**Trường hợp Agent duyệt (CONFIRM):**
+**When the Agent confirms the task (`CONFIRM`):**
 
 ```json
 {
@@ -43,7 +43,7 @@ Kích hoạt AI Agent đọc dữ liệu task từ Smart Contract, thực hiện
 }
 ```
 
-**Trường hợp Agent từ chối (REJECT):**
+**When the Agent rejects the task (`REJECT`):**
 
 ```json
 {
@@ -54,26 +54,26 @@ Kích hoạt AI Agent đọc dữ liệu task từ Smart Contract, thực hiện
 }
 ```
 
-### Mã lỗi có thể gặp
+### Error Responses
 
-| HTTP Status | Nguyên nhân | Ví dụ Response |
+| HTTP Status | Cause | Example Payload |
 | :---: | :--- | :--- |
-| `400 Bad Request` | `taskId` không hợp lệ hoặc Task trên chuỗi không ở trạng thái `Submitted`. | `{ "statusCode": 400, "message": "Task #1 is not in Submitted status" }` |
-| `401 Unauthorized` | Thiếu hoặc sai giá trị header `x-demo-secret`. | `{ "statusCode": 401, "message": "Invalid or missing x-demo-secret header" }` |
-| `404 Not Found` | `taskId` không tồn tại trên Smart Contract. | `{ "statusCode": 404, "message": "Task #999 does not exist" }` |
-| `500 Internal Server Error` | Lỗi RPC hoặc giao dịch on-chain bị revert. | `{ "statusCode": 500, "message": "Failed to submit transaction to Fuji" }` |
+| `400 Bad Request` | Invalid `taskId` or the on-chain task is not in `Submitted` status. | `{ "statusCode": 400, "message": "Task #1 is not in Submitted status" }` |
+| `401 Unauthorized` | Missing or invalid `x-demo-secret` header. | `{ "statusCode": 401, "message": "Invalid or missing x-demo-secret header" }` |
+| `404 Not Found` | `taskId` does not exist on the Smart Contract. | `{ "statusCode": 404, "message": "Task #999 does not exist" }` |
+| `500 Internal Server Error` | RPC failure or reverted on-chain transaction. | `{ "statusCode": 500, "message": "Failed to submit transaction to Fuji" }` |
 
 ---
 
 ## 2. `GET /agent/health`
 
-Kiểm tra trạng thái hoạt động của AI Agent, tiến độ đọc block gần nhất và địa chỉ ví mà Agent đang sử dụng để ký giao dịch.
+Checks the operational status of the AI Agent service, the latest synced block number, and the wallet address used by the Agent to sign transactions.
 
 ### Headers
 
-Không yêu cầu header bảo mật (`Public endpoint`).
+No authentication headers required (`Public endpoint`).
 
-### Response Thành công (`200 OK`)
+### Success Response (`200 OK`)
 
 ```json
 {
@@ -83,8 +83,8 @@ Không yêu cầu header bảo mật (`Public endpoint`).
 }
 ```
 
-| Trường | Kiểu | Mô tả |
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| `status` | `string` | Luôn trả về `"ok"` khi service hoạt động bình thường. |
-| `lastProcessedBlock` | `number` | Số thứ tự block gần nhất trên Avalanche Fuji mà Agent đã đồng bộ/xử lý sự kiện. |
-| `agentAddress` | `string` | Địa chỉ ví của Agent (địa chỉ đã được cấp quyền `AGENT_ROLE` trên `GroupTask.sol`). |
+| `status` | `string` | Always returns `"ok"` when the service is healthy. |
+| `lastProcessedBlock` | `number` | Latest Avalanche Fuji block number processed by the Agent. |
+| `agentAddress` | `string` | Wallet address of the Agent (granted `AGENT_ROLE` on `GroupTask.sol`). |

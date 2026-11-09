@@ -1,20 +1,20 @@
-# Kiến trúc Hệ thống — ProofWork
+# System Architecture — ProofWork
 
-## 1. Sơ đồ Kiến trúc Tổng quan
+## 1. High-Level Architecture Diagram
 
 ```mermaid
 flowchart LR
-    User(["Người dùng (MetaMask)"])
+    User(["User (MetaMask)"])
     FE["Frontend DApp\n(React + Vite + ethers v6)"]
     SC["Smart Contract: GroupTask.sol\n(Avalanche Fuji - Chain ID 43113)"]
     Agent["AI Agent Backend\n(NestJS + ethers v6)"]
     LLM["LLM Provider / Rule Fallback"]
 
-    User -->|"Tương tác UI & Ký Tx"| FE
+    User -->|"UI Interaction & Sign Tx"| FE
     FE -->|"JSON-RPC (Write/Read)"| SC
     SC -.->|"WebSocket Events\n(TaskSubmitted, TaskConfirmed, TaskRejected)"| FE
     SC -.->|"WebSocket Event\n(TaskSubmitted)"| Agent
-    Agent -->|"Phân tích bằng chứng"| LLM
+    Agent -->|"Analyze Evidence"| LLM
     LLM -->|"Decision: CONFIRM / REJECT"| Agent
     Agent -->|"Signed Tx: confirmCompletion / rejectCompletion"| SC
     FE -.->|"HTTP Fallback: POST /agent/evaluate"| Agent
@@ -22,65 +22,65 @@ flowchart LR
 
 ---
 
-## 2. Luồng Hoạt động (Sequence Flow)
+## 2. End-to-End Sequence Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Người dùng
+    actor User as User
     participant FE as Frontend (React)
     participant SC as GroupTask Contract (Fuji)
     participant Agent as AI Agent (NestJS)
     participant LLM as LLM Service
 
-    User->>FE: Nhập thông tin & bấm Tạo Group / Tạo Task
+    User->>FE: Enter details & click Create Group / Create Task
     FE->>SC: createGroup(name) -> createTask(groupId, title)
     SC-->>FE: Emit GroupCreated / TaskCreated (status = Pending)
 
-    User->>FE: Nhập mã bằng chứng (proofHash) & bấm Gửi
+    User->>FE: Enter evidence hash (proofHash) & click Submit
     FE->>SC: submitEvidence(taskId, proofHash)
     SC-->>FE: Emit TaskSubmitted(taskId, proofHash, submitter)
     SC-->>Agent: Emit TaskSubmitted(taskId, proofHash, submitter)
 
-    Agent->>SC: getTask(taskId) để lấy chi tiết Task
+    Agent->>SC: getTask(taskId) to fetch task details
     Agent->>LLM: evaluate(task)
     LLM-->>Agent: { decision: "CONFIRM" | "REJECT", reason }
 
     alt Decision == CONFIRM
         Agent->>SC: confirmCompletion(taskId)
         SC-->>FE: Emit TaskConfirmed(taskId, agentAddress, completedAt)
-        FE->>User: Tự động đổi thẻ sang Xanh lá (Confirmed) + hiện Toast
+        FE->>User: Auto-update card to Green (Confirmed) + show Toast
     else Decision == REJECT
         Agent->>SC: rejectCompletion(taskId, reason)
         SC-->>FE: Emit TaskRejected(taskId, agentAddress, reason)
-        FE->>User: Tự động đổi thẻ sang Đỏ (Rejected) + hiển thị lý do
+        FE->>User: Auto-update card to Red (Rejected) + display reason
     end
 
-    User->>FE: Mở trang Certificate Page & tìm theo địa chỉ ví
+    User->>FE: Open Certificate Page & search by wallet address
     FE->>SC: getCertificate(taskId)
-    SC-->>FE: Trả về thông tin Certificate (chỉ các task Confirmed)
+    SC-->>FE: Return Certificate data (Confirmed tasks only)
 ```
 
 ---
 
-## 3. Vai trò của 3 Thành phần
+## 3. Roles of the 3 Core Components
 
-| Thành phần | Công nghệ | Vai trò chính |
+| Component | Tech Stack | Primary Responsibility |
 | :--- | :--- | :--- |
-| **1. Smart Contract (`contracts/`)** | Solidity `^0.8.24`, Hardhat, OpenZeppelin `AccessControl` | Lưu trữ toàn bộ trạng thái on-chain (`Group`, `Task`, `Certificate`), kiểm soát phân quyền (`AGENT_ROLE`, `DEFAULT_ADMIN_ROLE`), và phát sự kiện (`Events`) khi trạng thái thay đổi. |
-| **2. Frontend (`frontend/`)** | React 18, Vite, TypeScript, `ethers.js` v6 | Cung cấp giao diện 3 màn hình (Create, Confirm, Certificate), kết nối ví MetaMask trên mạng Avalanche Fuji (`43113`), gửi giao dịch của người dùng và lắng nghe sự kiện on-chain theo thời gian thực. |
-| **3. AI Agent (`agent/`)** | NestJS, TypeScript, `ethers.js` v6 (`WebSocketProvider`) | Lắng nghe sự kiện `TaskSubmitted` từ Smart Contract qua WebSocket, đánh giá bằng chứng (`proofHash`) bằng LLM (kèm cơ chế fallback rule-based), và dùng ví có quyền `AGENT_ROLE` để gọi `confirmCompletion` hoặc `rejectCompletion` ghi kết quả lên on-chain. |
+| **1. Smart Contract (`contracts/`)** | Solidity `^0.8.24`, Hardhat, OpenZeppelin `AccessControl` | Stores all on-chain state (`Group`, `Task`, `Certificate`), enforces role-based access control (`AGENT_ROLE`, `DEFAULT_ADMIN_ROLE`), and emits events upon state transitions. |
+| **2. Frontend (`frontend/`)** | React 18, Vite, TypeScript, `ethers.js` v6 | Provides the 3-screen web interface (Create, Confirm, Certificate), connects to MetaMask on Avalanche Fuji (`43113`), sends user transactions, and listens to real-time on-chain events. |
+| **3. AI Agent (`agent/`)** | NestJS, TypeScript, `ethers.js` v6 (`WebSocketProvider`) | Listens to `TaskSubmitted` events from the Smart Contract via WebSocket, evaluates evidence (`proofHash`) using an LLM (with a deterministic rule-based fallback), and signs `confirmCompletion` or `rejectCompletion` transactions using the `AGENT_ROLE` wallet. |
 
 ---
 
-## 4. Quy tắc Giao tiếp & Đồng bộ Trạng thái
+## 4. Communication & State Synchronization Rules
 
-1. **Làm sao Frontend biết Agent đã duyệt xong?**
-   - Frontend **không** gọi polling liên tục vào Agent, mà đăng ký lắng nghe trực tiếp sự kiện on-chain (`contract.on("TaskConfirmed", ...)` và `contract.on("TaskRejected", ...)`) thông qua `eventService.ts`.
-   - Ngay khi giao dịch của Agent được xác nhận trên Avalanche Fuji, Smart Contract emit `TaskConfirmed` hoặc `TaskRejected`. Frontend bắt được sự kiện này, tự động cập nhật UI của thẻ Task tương ứng và bật `EventToast` mà người dùng không cần tải lại trang (F5).
-2. **Làm sao Agent biết có bằng chứng mới cần duyệt?**
-   - Agent kết nối tới Avalanche Fuji qua `WebSocketProvider` và lắng nghe sự kiện `TaskSubmitted(uint256 indexed taskId, bytes32 proofHash, address indexed submitter)`.
-3. **Cơ chế Dự phòng (Fallback khi mất kết nối WebSocket):**
-   - Trong trường hợp kết nối WebSocket bị gián đoạn khi demo, Frontend hoặc người vận hành có thể gọi trực tiếp HTTP API `POST /agent/evaluate` kèm header `x-demo-secret` và `{ "taskId": number }` để kích hoạt Agent đọc dữ liệu on-chain và thực thi duyệt task ngay lập tức.
-4. **Chia sẻ ABI & Địa chỉ Contract (`shared/`):**
-   - Sau khi compile và deploy ở `contracts/`, script `export.ts` xuất ABI ra `shared/abi/GroupTask.json` và địa chỉ contract ra `shared/addresses.json`. Cả `frontend/` và `agent/` đều đọc từ `shared/` để đảm bảo khớp tuyệt đối chữ ký hàm và sự kiện.
+1. **How does the Frontend know when the Agent has finished evaluating?**
+   - The Frontend does **not** poll the Agent backend continuously; instead, it subscribes directly to on-chain events (`contract.on("TaskConfirmed", ...)` and `contract.on("TaskRejected", ...)`) via `eventService.ts`.
+   - As soon as the Agent's transaction is confirmed on Avalanche Fuji, the Smart Contract emits `TaskConfirmed` or `TaskRejected`. The Frontend catches the event, immediately updates the corresponding Task Card UI, and triggers an `EventToast` notification without requiring a page reload (F5).
+2. **How does the Agent detect newly submitted evidence?**
+   - The Agent connects to Avalanche Fuji via `WebSocketProvider` and listens for `TaskSubmitted(uint256 indexed taskId, bytes32 proofHash, address indexed submitter)`.
+3. **Fallback Mechanism (When WebSocket disconnects):**
+   - If the WebSocket connection drops during a live demo, the Frontend or operator can invoke the HTTP endpoint `POST /agent/evaluate` with the `x-demo-secret` header and `{ "taskId": number }` payload to trigger the Agent to fetch on-chain state and execute evaluation immediately.
+4. **Shared ABI & Contract Addresses (`shared/`):**
+   - After compiling and deploying in `contracts/`, the `export.ts` script exports the ABI to `shared/abi/GroupTask.json` and deployed addresses to `shared/addresses.json`. Both `frontend/` and `agent/` import from `shared/` to guarantee 100% signature and event compatibility.

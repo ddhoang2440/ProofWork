@@ -1,103 +1,103 @@
-# Đặc tả Luồng Người dùng & UI/UX — `docs/use_spec.md`
+# User Flow & UI/UX Specification — `docs/use_spec.md`
 
-Ứng dụng Frontend (`frontend/`) gồm thanh điều hướng chung (Header) và **3 màn hình chính** tương ứng với 3 giai đoạn của vòng đời Task.
+The Frontend application (`frontend/`) consists of a shared navigation header and **3 primary screens** corresponding to the 3 stages of the Task lifecycle.
 
 ---
 
-## 1. Thành phần Dùng chung (Global Layout & Guards)
+## 1. Shared Components (Global Layout & Guards)
 
 1. **WalletConnectButton (`components/common/WalletConnectButton.tsx`):**
-   - Khi chưa kết nối ví: Hiển thị nút `"Connect Wallet"`.
-   - Khi đã kết nối ví: Hiển thị địa chỉ rút gọn dạng `0x1234...5678`.
+   - When disconnected: Displays a `"Connect Wallet"` button.
+   - When connected: Displays the shortened wallet address (e.g., `0x1234...5678`).
 2. **NetworkGuard (`components/common/NetworkGuard.tsx`):**
-   - Kiểm tra `chainId` hiện tại của ví.
-   - Nếu `chainId !== 43113` (Avalanche Fuji Testnet): Che nội dung trang bằng thông báo yêu cầu chuyển mạng kèm nút `"Switch to Avalanche Fuji"` (gọi `switchToFuji()`).
+   - Checks the connected wallet's `chainId`.
+   - If `chainId !== 43113` (Avalanche Fuji Testnet): Overlays a network warning prompt with a `"Switch to Avalanche Fuji"` button that invokes `switchToFuji()`.
 3. **EventToast (`components/common/EventToast.tsx`):**
-   - Hiển thị thông báo nổi (Toast) ở góc màn hình mỗi khi nhận được sự kiện on-chain (`GroupCreated`, `TaskCreated`, `TaskSubmitted`, `TaskConfirmed`, `TaskRejected`), tự động ẩn sau 5 giây.
+   - Displays a floating toast notification in the corner of the screen whenever an on-chain event (`GroupCreated`, `TaskCreated`, `TaskSubmitted`, `TaskConfirmed`, `TaskRejected`) is received, auto-dismissing after 5 seconds.
 
 ---
 
-## 2. MÀN HÌNH 1: Create Page (`/create`)
+## 2. SCREEN 1: Create Page (`/create`)
 
-**Mục đích:** Cho phép người dùng khởi tạo Nhóm (Group), tạo Công việc (Task) trong nhóm và nộp Bằng chứng hoàn thành (`proofHash`).
+**Purpose:** Allows users to create a Group, create a Task within a Group, and submit completion evidence (`proofHash`).
 
-### Các Thành phần Giao diện (Forms)
+### UI Forms & Contract Mapping
 
-| Khu vực / Component | Trường nhập liệu (Inputs) | Nút hành động | Hàm Contract được gọi |
+| Section / Component | Form Inputs | Action Button | Contract Function Called |
 | :--- | :--- | :--- | :--- |
-| **1. Form Tạo Group**<br>(`CreateGroupForm.tsx`) | - `groupName` (Text input, bắt buộc, placeholder: `"Nhập tên nhóm..."`) | Nút **"Tạo Group"** | `createGroup(name)` |
-| **2. Form Tạo Task**<br>(`CreateTaskForm.tsx`) | - `groupId` (Number/Select input, mặc định nhóm vừa tạo)<br>- `taskTitle` (Text input, bắt buộc, placeholder: `"Nhập tên công việc..."`) | Nút **"Tạo Task"** | `createTask(groupId, title)` |
-| **3. Form Submit Bằng chứng**<br>(`SubmitEvidenceForm.tsx`) | - `taskId` (Number input, mã task cần nộp)<br>- `proofHash` (Text input chuẩn `bytes32` hex `0x...`, có nút phụ *"Điền hash mẫu hợp lệ"* và *"Điền hash rỗng 0x0"* để hỗ trợ thao tác nhanh khi demo) | Nút **"Gửi Bằng chứng"** | `submitEvidence(taskId, proofHash)` |
+| **1. Create Group Form**<br>(`CreateGroupForm.tsx`) | - `groupName` (Text input, required, max 100 chars, placeholder: `"Enter group name..."`) | **"Create Group"** | `createGroup(name)` |
+| **2. Create Task Form**<br>(`CreateTaskForm.tsx`) | - `groupId` (Number/Select input, defaults to latest created group)<br>- `taskTitle` (Text input, required, max 100 chars, placeholder: `"Enter task title..."`) | **"Create Task"** | `createTask(groupId, title)` |
+| **3. Submit Evidence Form**<br>(`SubmitEvidenceForm.tsx`) | - `taskId` (Number input, ID of the task)<br>- `proofHash` (`bytes32` hex string input `0x...`, includes quick-fill helper buttons *"Fill Valid Sample Hash"* and *"Fill Zero Hash 0x0"* for fast demoing) | **"Submit Evidence"** | `submitEvidence(taskId, proofHash)` |
 
-### Trạng thái UI bắt buộc trên Màn hình 1
+### Required UI States on Screen 1
 
-1. **Chưa kết nối ví (`address == null`):**
-   - Ẩn hoặc khóa (`disabled`) toàn bộ các nút gửi form, hiển thị banner nhắc người dùng bấm **"Connect Wallet"** trước khi thao tác.
-2. **Đang xử lý giao dịch (`isSubmitting == true`):**
-   - Khi người dùng bấm nút và đang chờ ký ví hoặc chờ block xác nhận (`await tx.wait()`):
-   - Vô hiệu hóa (`disabled`) nút bấm và các ô input của form đó.
-   - Đổi nhãn nút thành `"Đang xử lý giao dịch..."` kèm spinner loading.
-3. **Hoàn tất giao dịch (`Success`):**
-   - Mở khóa lại form, xóa trắng dữ liệu vừa nhập.
-   - Hiển thị thông báo thành công kèm mã ID vừa tạo (`groupId` hoặc `taskId`) và link giao dịch.
-4. **Lỗi giao dịch (`Error`):**
-   - Nếu người dùng từ chối ký ví hoặc giao dịch revert: Mở khóa nút bấm và hiển thị thông báo lỗi màu đỏ ngay dưới form.
+1. **Wallet Disconnected (`address == null`):**
+   - Disable all form submission buttons and display a prompt reminding the user to click **"Connect Wallet"** first.
+2. **Transaction in Progress (`isSubmitting == true`):**
+   - While awaiting wallet signature or block confirmation (`await tx.wait()`):
+   - Disable the active form's button and inputs.
+   - Change button text to `"Processing transaction..."` with a loading spinner.
+3. **Transaction Completed (`Success`):**
+   - Re-enable the form and clear input fields.
+   - Display a success banner showing the newly created `groupId` or `taskId` along with a transaction link.
+4. **Transaction Failed (`Error`):**
+   - If the user rejects the wallet prompt or the transaction reverts: Re-enable the button and display a clear red error message below the form.
 
 ---
 
-## 3. MÀN HÌNH 2: Confirm Page (`/confirm`)
+## 3. SCREEN 2: Confirm Page (`/confirm`)
 
-**Mục đích:** Theo dõi danh sách toàn bộ các Task trong nhóm và quan sát quá trình AI Agent tự động duyệt hoặc từ chối bằng chứng theo thời gian thực.
+**Purpose:** Displays all Tasks in a group and visualizes real-time AI Agent evaluation (confirmation or rejection).
 
-### Bố cục & Hiển thị Thẻ Task (`TaskList.tsx` & `TaskCard.tsx`)
+### Task List & Card Layout (`TaskList.tsx` & `TaskCard.tsx`)
 
-- Cho phép chọn/nhập `groupId` để tải danh sách task bằng hàm `getTasksByGroup(groupId)`.
-- Mỗi Task được hiển thị dưới dạng một **Task Card** gồm:
-  - Mã Task (`#taskId`) & Tiêu đề (`title`).
-  - Địa chỉ người tạo (`creator` rút gọn).
-  - Giá trị `proofHash` (rút gọn, hoặc `"Chưa nộp"` nếu `Pending`).
-  - Huy hiệu trạng thái (**Status Badge**) và viền thẻ phân màu rõ rệt.
+- Allows selecting or entering a `groupId` to load tasks via `getTasksByGroup(groupId)`.
+- Each Task is rendered as a **Task Card** containing:
+  - Task ID (`#taskId`) & Title (`title`).
+  - Shortened creator address (`creator`).
+  - Shortened `proofHash` (or `"Not submitted"` if `Pending`).
+  - Color-coded **Status Badge** and card border.
 
-### Quy ước Phân màu Trạng thái (Status Color Coding)
+### Status Color Coding Specification
 
-| Trạng thái (`TaskStatus`) | Màu sắc chủ đạo | Nhãn hiển thị | Chi tiết UI bổ sung |
+| Status (`TaskStatus`) | Primary Color | Badge Label | Additional UI Details |
 | :--- | :--- | :--- | :--- |
-| **`Pending` (`0`)** | **Xám** (`#64748b` / nền `#f1f5f9`) | `Chờ nộp bằng chứng` | Hiển thị gợi ý: *"Hãy nộp bằng chứng ở màn hình Create"*. |
-| **`Submitted` (`1`)** | **Vàng** (`#d97706` / nền `#fef3c7`) | `Agent đang duyệt...` | Hiển thị hiệu ứng nhịp thở (pulse/spinner) biểu thị AI Agent đang phân tích bằng chứng. |
-| **`Confirmed` (`2`)** | **Xanh lá** (`#16a34a` / nền `#dcfce7`) | `Đã xác nhận (Confirmed)` | Hiển thị biểu tượng dấu tích xanh và thời gian hoàn thành (`completedAt`). |
-| **`Rejected` (`3`)** | **Đỏ** (`#dc2626` / nền `#fee2e2`) | `Bị từ chối (Rejected)` | Hiển thị biểu tượng cảnh báo kèm **Tooltip** (hoặc hộp thoại mở rộng) ghi rõ lý do từ chối (`rejectReason`) từ AI Agent. |
+| **`Pending` (`0`)** | **Gray** (`#64748b` / bg `#f1f5f9`) | `Pending Evidence` | Helper text: *"Submit evidence on the Create page"*. |
+| **`Submitted` (`1`)** | **Yellow** (`#d97706` / bg `#fef3c7`) | `Agent Evaluating...` | Displays a pulsing indicator/spinner showing the AI Agent is analyzing the evidence. |
+| **`Confirmed` (`2`)** | **Green** (`#16a34a` / bg `#dcfce7`) | `Confirmed` | Displays a green checkmark icon and the completion timestamp (`completedAt`). |
+| **`Rejected` (`3`)** | **Red** (`#dc2626` / bg `#fee2e2`) | `Rejected` | Displays a warning icon with a **Tooltip** (or expandable section) showing the exact rejection reason (`rejectReason`) from the AI Agent. |
 
-### Cơ chế Cập nhật Thời gian thực (Real-time Update)
+### Real-Time Update Mechanism
 
-- Khi trang `/confirm` đang mở, `eventService.ts` đăng ký lắng nghe các sự kiện `TaskSubmitted`, `TaskConfirmed`, `TaskRejected` từ `GroupTask.sol`.
-- Khi AI Agent gọi `confirmCompletion(taskId)` hoặc `rejectCompletion(taskId, reason)` thành công trên chuỗi:
-  1. Thẻ `TaskCard` có `id == taskId` **tự động chuyển màu** từ **Vàng** sang **Xanh lá** (hoặc **Đỏ**) ngay lập tức mà **không cần tải lại trang (F5)**.
-  2. `EventToast` bật lên ở góc màn hình thông báo kết quả tương ứng.
+- While `/confirm` is open, `eventService.ts` listens for `TaskSubmitted`, `TaskConfirmed`, and `TaskRejected` events from `GroupTask.sol`.
+- As soon as the AI Agent executes `confirmCompletion(taskId)` or `rejectCompletion(taskId, reason)` on-chain:
+  1. The matching `TaskCard` (`id == taskId`) **automatically transitions color** from **Yellow** to **Green** (or **Red**) without requiring a page refresh (F5).
+  2. `EventToast` pops up in the corner announcing the result.
 
 ---
 
-## 4. MÀN HÌNH 3: Certificate Page (`/certificates`)
+## 4. SCREEN 3: Certificate Page (`/certificates`)
 
-**Mục đích:** Tra cứu và trưng bày các Chứng chỉ hoàn thành công việc (On-chain Certificates) dành cho các Task đã được AI Agent xác nhận (`Confirmed`).
+**Purpose:** Searches and showcases verifiable On-Chain Completion Certificates for tasks confirmed by the AI Agent (`Confirmed`).
 
-### Cơ chế Truy vấn Dữ liệu cho MVP (Không cần sửa Contract)
+### MVP Data Query Strategy (Without Contract Changes)
 
-Vì hàm `getCertificate(uint256 taskId)` trên Smart Contract nhận vào `taskId` (chứ không nhận `address`), Frontend xử lý tìm kiếm theo địa chỉ ví như sau:
-1. Lưu danh sách các `groupId` / `taskId` đã tạo vào `localStorage` của trình duyệt (hoặc lấy danh sách task thông qua `getTasksByGroup(groupId)`).
-2. Lặp qua các `taskId` đã biết, lọc ra các task có `status === TaskStatus.Confirmed` và có `creator.toLowerCase() === searchWalletAddress.toLowerCase()` (nếu ô tìm kiếm để trống thì lấy tất cả task `Confirmed`).
-3. Với mỗi `taskId` thỏa mãn, gọi `getCertificate(taskId)` (kết hợp `queryFilter` sự kiện `TaskConfirmed` hoặc `localStorage` để lấy `txHash`) và render ra danh sách.
+Because `getCertificate(uint256 taskId)` on the Smart Contract accepts a `taskId` (rather than a wallet `address`), the Frontend performs wallet-based certificate lookup as follows:
+1. Read known `groupId` / `taskId` values stored in browser `localStorage` (or fetch tasks via `getTasksByGroup(groupId)`).
+2. Iterate over the tasks and filter those with `status === TaskStatus.Confirmed` and `creator.toLowerCase() === searchWalletAddress.toLowerCase()` (if the search box is empty, include all `Confirmed` tasks).
+3. For each matching `taskId`, call `getCertificate(taskId)` (combined with `TaskConfirmed` event logs or `localStorage` to retrieve the `txHash`) and render the certificate cards.
 
-### Các Thành phần Giao diện
+### UI Components
 
-1. **Ô Tìm kiếm theo Địa chỉ Ví (`WalletSearchInput.tsx`):**
-   - Ô input cho phép nhập địa chỉ ví (`0x...`) cần tra cứu, kèm nút **"Tìm kiếm"** và nút nhanh **"Ví của tôi"** (tự điền địa chỉ ví đang kết nối).
-2. **Danh sách Chứng chỉ (`CertificateList.tsx`):**
-   - Hiển thị danh sách các thẻ `CertificateCard` sau khi lọc theo địa chỉ ví.
-   - **Lưu ý quan trọng:** Tuyệt đối **chỉ hiển thị** các task có trạng thái `Confirmed`. Các task `Pending`, `Submitted`, hoặc `Rejected` không được hiển thị tại màn hình này.
-3. **Thẻ Chứng chỉ (`CertificateCard.tsx` & `ExplorerLink.tsx`):**
-   - Thiết kế dạng bằng chứng nhận trang trọng, hiển thị rõ ràng và tách biệt 5 thông tin sau:
-     1. **Tên Task (`taskTitle`):** Tiêu đề công việc đã hoàn thành.
-     2. **Địa chỉ người tạo (`creator`):** Địa chỉ ví của người thực hiện task.
-     3. **Ngày hoàn thành (`completedAt`):** Định dạng ngày giờ dễ đọc (`dd/MM/yyyy HH:mm:ss`).
-     4. **Mã băm bằng chứng (`proofHash`):** Dữ liệu `bytes32` do người dùng nộp khi gọi `submitEvidence` (hiển thị dạng rút gọn như dữ liệu tham khảo).
-     5. **Mã giao dịch (`txHash`):** Mã giao dịch do mạng lưới Avalanche Fuji sinh ra khi xác nhận hoàn thành (lấy từ event log `TaskConfirmed` hoặc `localStorage`), gắn với component `ExplorerLink` để mở trực tiếp trang tra cứu Snowtrace (`https://testnet.snowtrace.io/tx/<txHash>`). Nếu không có `txHash` trong phiên làm việc, fallback link về địa chỉ contract (`https://testnet.snowtrace.io/address/<contractAddress>`).
+1. **Wallet Address Search Input (`WalletSearchInput.tsx`):**
+   - Text input for entering a wallet address (`0x...`), paired with a **"Search"** button and a quick **"My Wallet"** button (auto-fills the currently connected wallet address).
+2. **Certificate List (`CertificateList.tsx`):**
+   - Renders the filtered list of `CertificateCard` components.
+   - **Important Rule:** Strictly display **only** tasks with `Confirmed` status. Tasks in `Pending`, `Submitted`, or `Rejected` status must never appear on this screen.
+3. **Certificate Card (`CertificateCard.tsx` & `ExplorerLink.tsx`):**
+   - Styled as an official completion certificate displaying 5 distinct fields:
+     1. **Task Title (`taskTitle`):** Title of the completed task.
+     2. **Creator Address (`creator`):** Wallet address of the task creator.
+     3. **Completion Date (`completedAt`):** Formatted human-readable timestamp (`YYYY-MM-DD HH:mm:ss`).
+     4. **Evidence Hash (`proofHash`):** The `bytes32` hash submitted by the user via `submitEvidence` (displayed as reference metadata).
+     5. **Transaction Hash (`txHash`):** The on-chain transaction hash generated by the Avalanche Fuji network when the task was confirmed (retrieved from `TaskConfirmed` event logs or `localStorage`), linked via `ExplorerLink` directly to Snowtrace (`https://testnet.snowtrace.io/tx/<txHash>`). If `txHash` is unavailable in the current session, fallback to the contract address link (`https://testnet.snowtrace.io/address/<contractAddress>`).
