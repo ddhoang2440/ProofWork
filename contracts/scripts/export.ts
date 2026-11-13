@@ -1,45 +1,17 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as dotenv from 'dotenv';
+import * as fs from "fs";
+import * as path from "path";
 
-dotenv.config();
+export function exportContractData(address: string) {
+    const abiSource = path.join(__dirname, "../artifacts/contracts/GroupTask.sol/GroupTask.json");
+    const abiDestDir = path.join(__dirname, "../../shared/abi");
+    const addressDest = path.join(__dirname, "../../shared/addresses.json");
 
-async function main(): Promise<void> {
-  const artifactPath = path.resolve(
-    __dirname,
-    '../artifacts/contracts/GroupTask.sol/GroupTask.json'
-  );
-  const sharedAbiPath = path.resolve(__dirname, '../../shared/abi/GroupTask.json');
-  const sharedAddressesPath = path.resolve(__dirname, '../../shared/addresses.json');
+    if (!fs.existsSync(abiDestDir)) fs.mkdirSync(abiDestDir, { recursive: true });
 
-  if (!fs.existsSync(artifactPath)) {
-    throw new Error(`Artifact not found at ${artifactPath}. Run "npm run compile" first.`);
-  }
+    const artifact = JSON.parse(fs.readFileSync(abiSource, "utf8"));
+    fs.writeFileSync(path.join(abiDestDir, "GroupTask.json"), JSON.stringify(artifact.abi, null, 2));
 
-  const artifactRaw = fs.readFileSync(artifactPath, 'utf-8');
-  const artifact = JSON.parse(artifactRaw) as { abi: unknown };
-
-  fs.mkdirSync(path.dirname(sharedAbiPath), { recursive: true });
-  fs.writeFileSync(sharedAbiPath, JSON.stringify(artifact.abi, null, 2), 'utf-8');
-  console.log('Exported ABI to:', sharedAbiPath);
-
-  const deployedAddress =
-    process.env.CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
-
-  const addressesData = {
-    fuji: {
-      GroupTask: deployedAddress,
-    },
-    localhost: {
-      GroupTask: deployedAddress,
-    },
-  };
-
-  fs.writeFileSync(sharedAddressesPath, JSON.stringify(addressesData, null, 2), 'utf-8');
-  console.log('Exported addresses to:', sharedAddressesPath);
+    const addressData = { "43113": address };
+    fs.writeFileSync(addressDest, JSON.stringify(addressData, null, 2));
+    console.log("✅ Đã export ABI và Address ra thư mục shared/");
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
